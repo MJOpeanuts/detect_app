@@ -151,6 +151,7 @@ class MainWindow(QMainWindow):
         splitter.setStretchFactor(1, 4)
         history_layout.addWidget(splitter, 1)
         self._tabs.addTab(history_page, "Historique")
+        self._tabs.currentChanged.connect(self._update_preview)
         layout.addWidget(self._tabs, 1)
         self.setCentralWidget(root)
 
