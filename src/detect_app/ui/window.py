@@ -130,6 +130,10 @@ class MainWindow(QMainWindow):
         self._tasks = TaskRunner(self)
         self._tasks.finished.connect(self._task_finished)
         self._import_probe = PreviewProbe(self)
+        self._import_message_timer = QTimer(self)
+        self._import_message_timer.setSingleShot(True)
+        self._import_message_timer.setInterval(8000)
+        self._import_message_timer.timeout.connect(self._clear_import_message)
         self._import_probe.finished.connect(self._import_probe_finished)
         self._build_ui()
         self._refresh_classification()
@@ -992,6 +996,7 @@ class MainWindow(QMainWindow):
         if error:
             self._import_refused(f"{path.name or path} : {error}")
             return
+        self._import_message_timer.stop()
         self._source_note.setProperty("message", False)
         self._import_probe.request(path)
         self._update_controls()
@@ -1001,7 +1006,7 @@ class MainWindow(QMainWindow):
         self._source_note.setProperty("message", True)
         self._set_note(self._source_note, message, "warning")
         self._source_note.setToolTip(message)
-        QTimer.singleShot(8000, self._clear_import_message)
+        self._import_message_timer.start()
         self._update_controls()
 
     def _clear_import_message(self) -> None:
