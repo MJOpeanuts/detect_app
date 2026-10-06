@@ -1,16 +1,11 @@
 from __future__ import annotations
 
 import os
-import sys
 import ctypes
+import sys
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-
-
-MAX_IMAGE_PIXELS = 120_000_000
-MAX_PREVIEW_DIMENSION = 2048
-MAX_PREVIEW_PIXELS = MAX_PREVIEW_DIMENSION * MAX_PREVIEW_DIMENSION
 
 
 def _windows_known_folder(folder_id: str) -> Path | None:
@@ -64,16 +59,22 @@ class AppPaths:
 
     @classmethod
     def create(cls) -> AppPaths:
-        if os.environ.get("LOCALAPPDATA"):
-            data_dir = Path(os.environ["LOCALAPPDATA"]) / "DataPeanuts" / "detect_app"
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        if local_app_data and Path(local_app_data).expanduser().is_absolute():
+            data_root = Path(local_app_data).expanduser()
         elif sys.platform == "win32":
-            local_app_data = _windows_known_folder("F1B32785-6FBA-4FCF-9D55-7B8E7F157091")
-            data_dir = (local_app_data or Path.home() / "AppData" / "Local") / "DataPeanuts" / "detect_app"
+            known_local_app_data = _windows_known_folder("F1B32785-6FBA-4FCF-9D55-7B8E7F157091")
+            data_root = known_local_app_data or Path.home() / "AppData" / "Local"
         else:
-            data_dir = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "DataPeanuts" / "detect_app"
+            xdg_data_home = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share").expanduser()
+            data_root = xdg_data_home if xdg_data_home.is_absolute() else Path.home() / ".local/share"
+        data_dir = data_root / "DataPeanuts" / "detect_app"
 
         default_image_root = _pictures_directory() / "detect_app" / "analyses"
-        image_root = Path(os.environ.get("DETECT_APP_IMAGES", default_image_root)).expanduser().resolve()
+        configured_image_root = Path(os.environ.get("DETECT_APP_IMAGES") or default_image_root).expanduser()
+        if not configured_image_root.is_absolute():
+            configured_image_root = Path.home() / configured_image_root
+        image_root = configured_image_root.resolve()
         source_root = Path(__file__).resolve().parents[2]
         resource_roots = (source_root, Path(sys.prefix) / "share" / "detect_app")
         resource_root = next(

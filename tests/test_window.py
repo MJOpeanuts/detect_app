@@ -18,6 +18,7 @@ from detect_app.config import AppPaths
 from detect_app.persistence.database import create_session_factory
 from detect_app.persistence.repository import AnalysisRepository
 from detect_app.ui.window import MainWindow
+from detect_app.ui.image_viewer import _IMAGE_LOAD_POOL
 
 
 class WindowTests(unittest.TestCase):
@@ -59,6 +60,7 @@ class WindowTests(unittest.TestCase):
 
     def tearDown(self):
         self.release.set()
+        _IMAGE_LOAD_POOL.waitForDone(5000)
         if self.window._thread is not None:
             self.wait_until(lambda: self.window._thread is None)
         self.window.close()
@@ -119,8 +121,10 @@ class WindowTests(unittest.TestCase):
 
     def test_history_cannot_launch_analysis_or_replace_visible_input(self):
         self.select_input()
+        self.wait_until(lambda: not self.window._input_image.pixmap().isNull())
         self.window._tabs.setCurrentIndex(1)
         self.window._history.setCurrentRow(0)
+        self.wait_until(lambda: not self.window._image.pixmap().isNull())
         self.assertEqual(self.window._preview_path, self.history_image)
         self.assertEqual(self.window._selected_image, self.input)
         self.assertEqual(self.window._input_preview_path, self.input)
@@ -196,6 +200,7 @@ class WindowTests(unittest.TestCase):
 
     def test_missing_history_image_is_not_restored_on_resize(self):
         self.window._show_preview(self.history_image)
+        self.wait_until(lambda: not self.window._image.pixmap().isNull())
         self.window._show_preview(self.paths.images / "missing.png")
         self.window._update_preview()
         self.assertIsNone(self.window._preview_path)
@@ -205,7 +210,8 @@ class WindowTests(unittest.TestCase):
         unreadable = self.paths.images / "unreadable.png"
         unreadable.write_text("not an image", encoding="utf-8")
         self.window._show_preview(unreadable)
-        self.assertEqual(self.window._image.text(), "Image introuvable ou illisible")
+        self.wait_until(lambda: self.window._image.text() != "Chargement de l’image…")
+        self.assertIn("Fichier image corrompu ou illisible", self.window._image.text())
 
     def test_image_change_clears_analysis_result_but_preserves_history(self):
         self.select_input()
@@ -269,12 +275,15 @@ class WindowTests(unittest.TestCase):
         }
 
     def test_selection_after_sort_keeps_detection_and_crop_identity(self):
-        objects = [self.make_object("high", 0.95), self.make_object("low", 0.15)]
+        objects = [self.make_object("high", 1.0), self.make_object("low", 0.95)]
         self.window._input_image.load_path(self.input)
         self.window._input_image.set_detections(objects)
         self.window._results.set_result(objects, "2 objets détectés")
         table = self.window._results.table
         table.sortItems(1, Qt.SortOrder.DescendingOrder)
+        self.assertEqual(table.item(0, 1).text(), "100.0%")
+        self.assertEqual(table.item(0, 0).data(Qt.ItemDataRole.UserRole), "high")
+        self.assertEqual(table.item(1, 1).text(), "95.0%")
         row = next(
             row for row in range(table.rowCount())
             if table.item(row, 0).data(Qt.ItemDataRole.UserRole) == "low"
@@ -284,6 +293,7 @@ class WindowTests(unittest.TestCase):
         self.assertEqual(self.window._input_image._selected_id, "low")
         self.assertEqual(self.window._results.crop.path, self.crop_image)
         self.assertEqual(self.window._results.table.columnCount(), 2)
+        self.assertEqual(self.window.windowTitle(), "detect_app")
 
     def test_fullscreen_shortcuts_toggle_and_restore_window_geometry(self):
         geometry = self.window.geometry()

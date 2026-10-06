@@ -48,6 +48,22 @@ class VisionTests(unittest.TestCase):
         classes = np.array([0, 0, 1], dtype=np.int32)
         self.assertEqual(set(_nms(boxes, scores, classes)), {0, 2})
 
+    def test_nms_uses_global_confidence_limit_across_classes(self):
+        boxes = np.array(
+            [[index * 10, 0, index * 10 + 5, 5] for index in range(300)]
+            + [[0, 20, 5, 25]],
+            dtype=np.float32,
+        )
+        scores = np.array([0.30 - index / 100_000 for index in range(300)] + [0.99], dtype=np.float32)
+        classes = np.array([0] * 300 + [1], dtype=np.int32)
+
+        selected = _nms(boxes, scores, classes)
+
+        self.assertEqual(len(selected), 300)
+        self.assertEqual(selected[0], 300)
+        self.assertIn(300, selected)
+        self.assertEqual(scores[selected[0]], 0.99)
+
     def test_unsupported_model_path_has_clear_error(self):
         with self.assertRaises(ModelCompatibilityError):
             inspect_model(REPOSITORY_ROOT / "README.md")

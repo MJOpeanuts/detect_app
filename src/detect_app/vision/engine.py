@@ -8,9 +8,10 @@ from pathlib import Path
 
 import numpy as np
 import onnxruntime as ort
-from PIL import Image, ImageOps
+from PIL import Image
 
 from detect_app.vision.types import Detection
+from detect_app.vision.image import open_oriented_rgb
 
 CONFIDENCE_THRESHOLD = 0.25
 IOU_THRESHOLD = 0.45
@@ -180,15 +181,16 @@ def _nms(boxes: np.ndarray, scores: np.ndarray, classes: np.ndarray) -> list[int
     for class_id in np.unique(classes):
         indices = np.flatnonzero(classes == class_id)
         indices = indices[np.argsort(scores[indices])[::-1]]
-        while indices.size and len(selected) < 300:
+        class_selected = 0
+        while indices.size and class_selected < 300:
             current = int(indices[0])
             selected.append(current)
+            class_selected += 1
             indices = indices[1:]
             if indices.size:
                 indices = indices[_iou(boxes[current], boxes[indices]) <= IOU_THRESHOLD]
-        if len(selected) >= 300:
-            break
-    return selected
+    selected.sort(key=lambda index: float(scores[index]), reverse=True)
+    return selected[:300]
 
 
 def run_inference(
@@ -201,8 +203,7 @@ def run_inference(
     if len(class_names) != inspection.class_count:
         raise ModelCompatibilityError("Le mapping des classes ne correspond pas au modèle.")
 
-    with Image.open(image_path) as opened:
-        original = ImageOps.exif_transpose(opened).convert("RGB")
+    original = open_oriented_rgb(image_path)
     tensor, scale, pad_x, pad_y = _letterbox(original, inspection.input_size)
     session = ort.InferenceSession(str(model_path), providers=["CPUExecutionProvider"])
     raw = session.run([inspection.output_name], {inspection.input_name: tensor})[0]

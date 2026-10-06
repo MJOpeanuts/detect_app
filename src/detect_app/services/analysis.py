@@ -64,12 +64,10 @@ class AnalysisService:
                 model.class_names,
                 confidence_threshold,
             )
-            crop_source = image.copy()
             crops_directory = job_directory / "crops"
             if detections:
                 crops_directory.mkdir()
             saved_detections: list[Detection] = []
-            draw = ImageDraw.Draw(image)
             for index, detection in enumerate(detections, start=1):
                 left = max(0, int(detection.x_min))
                 top = max(0, int(detection.y_min))
@@ -78,8 +76,12 @@ class AnalysisService:
                 crop_path = None
                 if right > left and bottom > top:
                     crop = crops_directory / f"{index:04d}.png"
-                    crop_source.crop((left, top, right, bottom)).save(crop)
+                    image.crop((left, top, right, bottom)).save(crop)
                     crop_path = crop.relative_to(self._images_directory).as_posix()
+                saved_detections.append(replace(detection, crop_path=crop_path))
+
+            draw = ImageDraw.Draw(image)
+            for detection in detections:
                 label = f"{detection.class_name} {detection.confidence:.2f}"
                 draw.rectangle(
                     (detection.x_min, detection.y_min, detection.x_max, detection.y_max),
@@ -87,7 +89,6 @@ class AnalysisService:
                     width=max(2, round(min(image.size) / 300)),
                 )
                 draw.text((detection.x_min, max(0, detection.y_min - 14)), label, fill=(255, 55, 55))
-                saved_detections.append(replace(detection, crop_path=crop_path))
             annotated_path = job_directory / "annotated.png"
             image.save(annotated_path)
             self._repository.complete_job(
@@ -95,6 +96,8 @@ class AnalysisService:
                 saved_detections,
                 annotated_path.relative_to(self._images_directory).as_posix(),
             )
+        except MemoryError:
+            self._repository.fail_job(job_id, "Mémoire insuffisante pour terminer l’analyse de cette image.")
         except Exception as exc:
             self._repository.fail_job(job_id, str(exc) or exc.__class__.__name__)
         return job_id
