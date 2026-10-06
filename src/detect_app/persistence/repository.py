@@ -144,6 +144,7 @@ class AnalysisRepository:
                 },
                 [
                     {
+                        "id": item.id,
                         "class_id": item.class_id,
                         "class_name": item.class_name,
                         "confidence": item.confidence,
