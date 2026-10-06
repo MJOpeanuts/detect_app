@@ -27,9 +27,11 @@ L'import accepte uniquement les modèles ONNX dont la signature statique est cel
 - Base unique : `%LOCALAPPDATA%\DataPeanuts\NutsVision\database\nuts_vision.sqlite3`
 - Journaux et modèles : `%LOCALAPPDATA%\DataPeanuts\NutsVision\logs\` et `models\`
 - Configuration de mapping : `%LOCALAPPDATA%\DataPeanuts\NutsVision\configuration\models\`
-- Images, annotations et découpes : `Documents\NutsVision\analyses\<job_id>\`
+- Images, annotations et découpes : `Images\NutsVision\analyses\<job_id>\`
 
 Le dossier des images peut être modifié avec la variable `NUTS_VISION_IMAGES`. Le modèle et sa configuration sont copiés dans les dossiers gérés par l'application ; son empreinte SHA-256 est enregistrée avec chaque analyse.
+
+Les métadonnées du modèle fourni indiquent la licence AGPL-3.0.
 
 La base contient exactement deux tables métier, `analysis_logs` et `detected_objects`. `completed_at` correspond à la fin du traitement aussi bien en cas de succès que d'erreur. Une ligne d'analyse est créée pour chaque exécution, y compris pour la même image et le même modèle. Le lien objet-analyse utilise une clé étrangère `ON DELETE RESTRICT`.
 

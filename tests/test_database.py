@@ -39,6 +39,21 @@ class DatabaseTests(unittest.TestCase):
                 "annotated_image_path",
             ],
         )
+        self.assertEqual(
+            [column["name"] for column in inspector.get_columns("detected_objects")],
+            [
+                "id",
+                "log_id",
+                "class_id",
+                "class_name",
+                "confidence",
+                "x_min",
+                "y_min",
+                "x_max",
+                "y_max",
+                "crop_path",
+            ],
+        )
         self.assertTrue(all(str(column["type"]) == "TEXT" for column in inspector.get_columns("analysis_logs")))
         with self.sessions() as session:
             self.assertEqual(session.execute(text("PRAGMA foreign_keys")).scalar_one(), 1)

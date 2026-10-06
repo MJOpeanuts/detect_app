@@ -26,8 +26,8 @@ class AppPaths:
         else:
             data_dir = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share")) / "DataPeanuts" / "NutsVision"
 
-        documents = Path.home() / "Documents"
-        image_root = Path(os.environ.get("NUTS_VISION_IMAGES", documents / "NutsVision" / "analyses"))
+        default_image_root = Path.home() / "Images" / "NutsVision" / "analyses"
+        image_root = Path(os.environ.get("NUTS_VISION_IMAGES", default_image_root)).expanduser().resolve()
         source_root = Path(__file__).resolve().parents[2]
         installed_root = Path(sys.prefix) / "share" / "nutsvision"
         bundled_model = source_root / "ic_detect_best.onnx"
