@@ -95,8 +95,14 @@ def inspect_model(model_path: str | Path) -> ModelInspection:
     if len(output_tensor.shape) != 3 or output_tensor.type != "tensor(float)":
         raise ModelCompatibilityError("La sortie doit être un tenseur float de détections brutes de rang 3.")
 
-    metadata = dict(session.get_modelmeta().custom_metadata_map or {})
-    if metadata.get("task", "detect").lower() != "detect":
+    model_metadata = session.get_modelmeta()
+    metadata = dict(model_metadata.custom_metadata_map or {})
+    producer = model_metadata.producer_name or ""
+    if "ultralytics" not in f"{metadata.get('author', '')} {producer}".lower():
+        raise ModelCompatibilityError(
+            "Le format pris en charge est un export de détection Ultralytics YOLO avec métadonnées vérifiables."
+        )
+    if metadata.get("task", "").lower() != "detect":
         raise ModelCompatibilityError("Le modèle n'est pas un détecteur d'objets.")
     options = _metadata_options(metadata)
     if (
