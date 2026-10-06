@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import sys
 
+from PySide6.QtCore import QLockFile
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from detect_app.config import AppPaths
 from detect_app.persistence.database import create_session_factory
@@ -15,23 +16,36 @@ from detect_app.ui.window import MainWindow
 
 def main() -> int:
     paths = AppPaths.create()
-    session_factory = create_session_factory(paths.database)
-    repository = AnalysisRepository(session_factory)
-    model_registry = ModelRegistry(paths.models, paths.configuration)
-    startup_error = None
-    try:
-        model_registry.ensure_bundled_model(paths.bundled_model)
-    except Exception as exc:
-        startup_error = str(exc)
-    service = AnalysisService(repository, model_registry, paths.images)
-
     application = QApplication(sys.argv)
     application.setApplicationName("Nuts Vision Desktop")
     if paths.icon.is_file():
         application.setWindowIcon(QIcon(str(paths.icon)))
-    window = MainWindow(paths, repository, model_registry, service, startup_error)
-    window.show()
-    return application.exec()
+    instance_lock = QLockFile(str(paths.data_dir / "nuts_vision.lock"))
+    instance_lock.setStaleLockTime(0)
+    if not instance_lock.tryLock(0):
+        message = (
+            "Nuts Vision Desktop est déjà ouvert. Utilisez la fenêtre existante."
+            if instance_lock.error() == QLockFile.LockError.LockFailedError
+            else "Impossible de verrouiller les données locales. Vérifiez les droits d'accès."
+        )
+        QMessageBox.warning(None, "Démarrage impossible", message)
+        return 1
+    try:
+        session_factory = create_session_factory(paths.database)
+        repository = AnalysisRepository(session_factory)
+        repository.recover_interrupted_jobs()
+        model_registry = ModelRegistry(paths.models, paths.configuration)
+        startup_error = None
+        try:
+            model_registry.ensure_bundled_model(paths.bundled_model)
+        except Exception as exc:
+            startup_error = str(exc)
+        service = AnalysisService(repository, model_registry, paths.images)
+        window = MainWindow(paths, repository, model_registry, service, startup_error)
+        window.show()
+        return application.exec()
+    finally:
+        instance_lock.unlock()
 
 
 if __name__ == "__main__":

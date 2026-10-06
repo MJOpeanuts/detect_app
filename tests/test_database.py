@@ -84,6 +84,46 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(log["status"], "processing")
         self.assertEqual(objects, [])
 
+    def test_recovery_only_changes_processing_jobs_and_preserves_files(self):
+        image = Path(self.temporary_directory.name) / "original.png"
+        image.write_bytes(b"diagnostic image")
+        for job_id in ("pending-a", "pending-b", "completed", "failed"):
+            self.repository.create_job(job_id, str(image), "manual", "model", "b" * 64)
+        self.repository.complete_job("completed", [], "annotated.png")
+        self.repository.fail_job("failed", "Original error")
+        completed = self.repository.get_job("completed")
+        failed = self.repository.get_job("failed")
+        pending = self.repository.get_job("pending-a")[0]
+
+        self.repository.recover_interrupted_jobs()
+        for job_id in ("pending-a", "pending-b"):
+            log, objects = self.repository.get_job(job_id)
+            self.assertEqual(log["status"], "error")
+            self.assertIn("interrompue", log["error_message"])
+            self.assertIsNone(log["completed_at"])
+            self.assertEqual(log["image_path"], str(image))
+            self.assertEqual(objects, [])
+        self.assertEqual(self.repository.get_job("pending-a")[0]["started_at"], pending["started_at"])
+        self.assertEqual(self.repository.get_job("completed"), completed)
+        self.assertEqual(self.repository.get_job("failed"), failed)
+        self.assertEqual(image.read_bytes(), b"diagnostic image")
+        recovered = self.repository.get_job("pending-a")
+        self.repository.recover_interrupted_jobs()
+        self.assertEqual(self.repository.get_job("pending-a"), recovered)
+
+    def test_recovery_rolls_back_its_transaction_on_error(self):
+        self.repository.create_job("pending", "original.png", "manual", "model", "b" * 64)
+        with self.sessions.begin() as session:
+            session.execute(text(
+                "CREATE TRIGGER reject_recovery BEFORE UPDATE ON analysis_logs "
+                "BEGIN SELECT RAISE(ABORT, 'recovery failed'); END"
+            ))
+        with self.assertRaises(IntegrityError):
+            self.repository.recover_interrupted_jobs()
+        log, _ = self.repository.get_job("pending")
+        self.assertEqual(log["status"], "processing")
+        self.assertIsNone(log["error_message"])
+
 
 if __name__ == "__main__":
     unittest.main()
