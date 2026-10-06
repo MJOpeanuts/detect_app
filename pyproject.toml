@@ -23,4 +23,10 @@ nuts-vision = "detect_app.__main__:main"
 where = ["src"]
 
 [tool.setuptools.data-files]
-"share/nutsvision" = ["ic_detect_best.onnx", "nuts-app.png"]
+"share/nutsvision" = [
+    "ic_detect_best.onnx",
+    "nuts-app.png",
+    "nuts-app.ico",
+    "powered by_white.png",
+    "squirrel.svg",
+]
