@@ -5,7 +5,7 @@ from dataclasses import replace
 from pathlib import Path
 from uuid import uuid4
 
-from PIL import ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 from detect_app.persistence.repository import AnalysisRepository
 from detect_app.services.image_source import ImageSource
@@ -13,6 +13,38 @@ from detect_app.services.models import ModelRegistry
 from detect_app.vision.engine import run_inference
 from detect_app.vision.image import serialize_image_processing
 from detect_app.vision.types import Detection
+
+
+ANNOTATION_COLOR = (255, 55, 55)
+ANNOTATION_TEXT = (255, 255, 255)
+
+
+def draw_annotations(image: Image.Image, detections: list[Detection]) -> None:
+    """Burn boxes, class names and confidences into the annotated copy (never the original)."""
+    if not detections:
+        return
+    draw = ImageDraw.Draw(image)
+    short_side = min(image.size)
+    line_width = max(2, round(short_side / 400))
+    font_size = max(12, min(96, round(short_side / 45)))
+    try:
+        font = ImageFont.load_default(size=font_size)
+    except TypeError:
+        font = ImageFont.load_default()
+    padding = max(2, font_size // 5)
+    for detection in detections:
+        box = (detection.x_min, detection.y_min, detection.x_max, detection.y_max)
+        draw.rectangle(box, outline=ANNOTATION_COLOR, width=line_width)
+        label = f"{detection.class_name} {detection.confidence:.0%}"
+        left, top, right, bottom = draw.textbbox((0, 0), label, font=font)
+        label_width = right - left + 2 * padding
+        label_height = bottom - top + 2 * padding
+        x = min(max(0.0, detection.x_min), max(0.0, image.width - label_width))
+        y = detection.y_min - label_height
+        if y < 0:
+            y = min(detection.y_min + line_width, max(0.0, image.height - label_height))
+        draw.rectangle((x, y, x + label_width, y + label_height), fill=ANNOTATION_COLOR)
+        draw.text((x + padding - left, y + padding - top), label, fill=ANNOTATION_TEXT, font=font)
 
 
 class AnalysisService:
@@ -40,6 +72,7 @@ class AnalysisService:
         source: ImageSource,
         model_identifier: str,
         confidence_threshold: float = 0.25,
+        pcba_id: str | None = None,
     ) -> str:
         if source.source_type not in {"manual", "arducam"}:
             raise ValueError(f"Source d'image non prise en charge : {source.source_type}")
@@ -51,13 +84,18 @@ class AnalysisService:
         suffix = image_path.suffix.lower()
         original_path = job_directory / f"original{suffix if suffix in self.SUPPORTED_IMAGE_SUFFIXES else '.img'}"
         relative_original = original_path.relative_to(self._images_directory).as_posix()
-        self._repository.create_job(
-            job_id,
-            relative_original,
-            source.source_type,
-            model.name,
-            model.sha256,
-        )
+        try:
+            self._repository.create_job(
+                job_id,
+                relative_original,
+                source.source_type,
+                model.name,
+                model.sha256,
+                pcba_id,
+            )
+        except Exception:
+            job_directory.rmdir()
+            raise
         try:
             shutil.copy2(image_path, original_path)
             image, detections = run_inference(
@@ -82,15 +120,7 @@ class AnalysisService:
                     crop_path = crop.relative_to(self._images_directory).as_posix()
                 saved_detections.append(replace(detection, crop_path=crop_path))
 
-            draw = ImageDraw.Draw(image)
-            for detection in detections:
-                label = f"{detection.class_name} {detection.confidence:.2f}"
-                draw.rectangle(
-                    (detection.x_min, detection.y_min, detection.x_max, detection.y_max),
-                    outline=(255, 55, 55),
-                    width=max(2, round(min(image.size) / 300)),
-                )
-                draw.text((detection.x_min, max(0, detection.y_min - 14)), label, fill=(255, 55, 55))
+            draw_annotations(image, detections)
             annotated_path = job_directory / "annotated.png"
             image.save(annotated_path)
             self._repository.complete_job(

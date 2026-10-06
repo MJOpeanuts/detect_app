@@ -3,7 +3,6 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QGroupBox,
     QLabel,
     QTableWidget,
     QTableWidgetItem,
@@ -12,6 +11,7 @@ from PySide6.QtWidgets import (
 )
 
 from detect_app.services.analysis import AnalysisService
+from detect_app.ui.collapsible import CollapsibleSection
 from detect_app.ui.image_viewer import ImageViewer
 
 
@@ -28,6 +28,8 @@ class NumericTableWidgetItem(QTableWidgetItem):
 
 class ObjectPanel(QWidget):
     selected = Signal(object)
+    ERROR_SECTION = "Erreur"
+    OBJECT_SECTION = "Objet sélectionné"
 
     def __init__(self, service: AnalysisService, parent: QWidget | None = None):
         super().__init__(parent)
@@ -42,7 +44,14 @@ class ObjectPanel(QWidget):
         layout.addWidget(heading)
         self.summary = QLabel("Aucun résultat")
         self.summary.setProperty("secondary", True)
+        self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
+        self.error_summary = QLabel()
+        self.error_summary.setObjectName("errorSummary")
+        self.error_summary.setWordWrap(True)
+        self.error_summary.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.error_summary.hide()
+        layout.addWidget(self.error_summary)
         self.table = QTableWidget(0, 2)
         self.table.setHorizontalHeaderLabels(["Classe", "Confiance"])
         self.table.horizontalHeader().setStretchLastSection(False)
@@ -64,24 +73,26 @@ class ObjectPanel(QWidget):
         self.crop.setMinimumHeight(130)
         self.crop.setMaximumHeight(210)
         layout.addWidget(self.crop, 1)
-        self.diagnostic = QGroupBox("Diagnostic")
-        self.diagnostic.setCheckable(True)
-        self.diagnostic.setChecked(False)
-        diagnostic_layout = QVBoxLayout(self.diagnostic)
-        self.diagnostic_text = QLabel("Aucun détail technique.")
-        self.diagnostic_text.setProperty("secondary", True)
-        self.diagnostic_text.setWordWrap(True)
-        diagnostic_layout.addWidget(self.diagnostic_text)
+        self.diagnostic = CollapsibleSection("Diagnostic")
         layout.addWidget(self.diagnostic)
-        self.diagnostic.toggled.connect(self.diagnostic_text.setVisible)
-        self.diagnostic_text.hide()
+
+    def set_error(self, details: str | None) -> None:
+        """Short error summary stays visible; full details live in Diagnostic."""
+        details = (details or "").strip()
+        self.diagnostic.set_section(self.ERROR_SECTION, details)
+        if details:
+            first_line = details.splitlines()[0]
+            self.error_summary.setText(first_line[:200] + ("…" if len(first_line) > 200 else ""))
+            self.error_summary.show()
+        else:
+            self.error_summary.clear()
+            self.error_summary.hide()
 
     def set_result(self, objects: list[dict], summary: str, diagnostic: str = "") -> None:
         self._objects = {str(obj.get("id", index)): obj for index, obj in enumerate(objects)}
         self._selected_id = None
-        self.diagnostic.setChecked(False)
         self.summary.setText(summary)
-        self.diagnostic_text.setText(diagnostic or "Aucun détail technique.")
+        self.set_error(diagnostic)
         self.table.setSortingEnabled(False)
         self.table.setRowCount(0)
         for row, (identity, obj) in enumerate(self._objects.items()):
@@ -120,6 +131,7 @@ class ObjectPanel(QWidget):
         if obj is None:
             self.object_details.setText("Sélectionnez un objet pour afficher sa découpe.")
             self.crop.load_path(None)
+            self.diagnostic.set_section(self.OBJECT_SECTION, None)
             return
         coordinates = (
             f"x1={obj['x_min']:.1f}, y1={obj['y_min']:.1f}, "
@@ -137,7 +149,7 @@ class ObjectPanel(QWidget):
             self.crop.setText("Découpe introuvable")
         else:
             self.crop.load_path(crop_path)
-        self.diagnostic_text.setText(details)
+        self.diagnostic.set_section(self.OBJECT_SECTION, details)
 
     def selected_id(self) -> str | None:
         return self._selected_id

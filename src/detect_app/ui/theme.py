@@ -73,8 +73,43 @@ QScrollBar::handle:vertical { background: #3A4048; border-radius: 4px; min-heigh
 QScrollBar:horizontal { background: #181A1D; height: 10px; margin: 0; }
 QScrollBar::handle:horizontal { background: #3A4048; border-radius: 4px; min-width: 20px; }
 QToolTip { color: #F2F3F5; background: #22252A; border: 1px solid #3A4048; }
-QMessageBox, QFileDialog, QInputDialog { background: #181A1D; }
+QMessageBox, QFileDialog, QInputDialog, QDialog { background: #181A1D; }
+QLabel#sectionTitle { font-size: 11pt; font-weight: 600; }
+QLabel#rowTitle { color: #A9B0BA; font-weight: 600; }
+QLabel#inputName { color: #F2F3F5; }
+QLabel#viewerState { color: #A9B0BA; font-weight: 600; }
+QLabel#errorSummary { color: #F18B86; }
+QLabel[note="hint"] { color: #A9B0BA; }
+QLabel[note="normal"] { color: #A9B0BA; }
+QLabel[note="success"] { color: #83D6A3; }
+QLabel[note="warning"] { color: #E9C46A; }
+QLabel[note="error"] { color: #F18B86; }
+QWidget#brandFooter, QLabel#brandAttribution { background: transparent; border: 0; }
+QGraphicsView { border: 1px solid transparent; }
+QGraphicsView[dropActive="true"] { border: 1px dashed #A9B0BA; }
+QPushButton[segment] {
+    color: #A9B0BA; background: #22252A; border: 1px solid #3A4048;
+    padding: 4px 14px; min-height: 18px;
+}
+QPushButton[segment="left"] { border-radius: 0; border-top-left-radius: 6px; border-bottom-left-radius: 6px; }
+QPushButton[segment="right"] { border-radius: 0; border-top-right-radius: 6px; border-bottom-right-radius: 6px; border-left: 0; }
+QPushButton[segment]:hover { color: #F2F3F5; background: #2B2F35; }
+QPushButton[segment]:checked { color: #202328; background: #DDE1E6; border-color: #DDE1E6; font-weight: 600; }
+QPushButton[segment]:disabled { color: #5D646D; background: #1F2125; border-color: #2E3339; }
+QPushButton[segment]:focus { border: 1px solid #F2F3F5; padding: 4px 14px; }
+QToolButton#collapsibleHeader {
+    color: #A9B0BA; background: transparent; border: 1px solid transparent;
+    border-radius: 5px; padding: 4px 4px; font-weight: 600;
+}
+QToolButton#collapsibleHeader:hover { color: #F2F3F5; background: #22252A; }
+QToolButton#collapsibleHeader:focus { border: 1px solid #A9B0BA; }
+QPlainTextEdit {
+    background: #22252A; color: #F2F3F5; border: 1px solid #3A4048;
+    border-radius: 6px; padding: 4px; selection-background-color: #39414B;
+}
+QPlainTextEdit#collapsibleContent { color: #A9B0BA; }
 """
 
 VIEW_BACKGROUND = QColor("#22252A")
+VIEW_DROP_BACKGROUND = QColor("#272B31")
 VIEW_TEXT = QColor("#A9B0BA")
