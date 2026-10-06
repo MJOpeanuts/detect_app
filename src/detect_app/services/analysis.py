@@ -33,7 +33,12 @@ class AnalysisService:
             raise ValueError("Chemin d'image en dehors du dossier d'analyses.")
         return path
 
-    def analyze(self, source: ImageSource, model_identifier: str) -> str:
+    def analyze(
+        self,
+        source: ImageSource,
+        model_identifier: str,
+        confidence_threshold: float = 0.25,
+    ) -> str:
         if source.source_type not in {"manual", "arducam"}:
             raise ValueError(f"Source d'image non prise en charge : {source.source_type}")
         model = self._model_registry.get(model_identifier)
@@ -53,7 +58,12 @@ class AnalysisService:
         )
         try:
             shutil.copy2(image_path, original_path)
-            image, detections = run_inference(model.path, original_path, model.class_names)
+            image, detections = run_inference(
+                model.path,
+                original_path,
+                model.class_names,
+                confidence_threshold,
+            )
             crop_source = image.copy()
             crops_directory = job_directory / "crops"
             if detections:

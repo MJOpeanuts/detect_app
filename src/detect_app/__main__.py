@@ -18,8 +18,10 @@ def main() -> int:
     paths = AppPaths.create()
     application = QApplication(sys.argv)
     application.setApplicationName("Nuts Vision Desktop")
-    if paths.icon.is_file():
-        application.setWindowIcon(QIcon(str(paths.icon)))
+    windows_icon = paths.icon.parent / "nuts-app.ico"
+    app_icon = windows_icon if sys.platform == "win32" and windows_icon.is_file() else paths.icon
+    if app_icon.is_file():
+        application.setWindowIcon(QIcon(str(app_icon)))
     instance_lock = QLockFile(str(paths.data_dir / "nuts_vision.lock"))
     instance_lock.setStaleLockTime(0)
     if not instance_lock.tryLock(0):
