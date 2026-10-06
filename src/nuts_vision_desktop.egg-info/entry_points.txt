@@ -1,2 +1,0 @@
-[console_scripts]
-nuts-vision = detect_app.__main__:main

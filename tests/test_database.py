@@ -14,7 +14,7 @@ from detect_app.vision.types import Detection
 class DatabaseTests(unittest.TestCase):
     def setUp(self):
         self.temporary_directory = tempfile.TemporaryDirectory()
-        self.database_path = Path(self.temporary_directory.name) / "nuts_vision.sqlite3"
+        self.database_path = Path(self.temporary_directory.name) / "detect_app.sqlite3"
         self.sessions = create_session_factory(self.database_path)
         self.repository = AnalysisRepository(self.sessions)
 
