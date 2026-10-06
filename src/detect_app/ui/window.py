@@ -119,7 +119,7 @@ QGroupBox {
 }
 QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; }
 QProgressBar { background: #2B2F35; border: 0; border-radius: 2px; max-height: 3px; }
-QProgressBar::chunk { background: #F28C28; border-radius: 2px; }
+QProgressBar::chunk { background: #A9B0BA; border-radius: 2px; }
 QScrollBar:vertical { background: #181A1D; width: 10px; margin: 0; }
 QScrollBar::handle:vertical { background: #3A4048; border-radius: 4px; min-height: 20px; }
 QScrollBar:horizontal { background: #181A1D; height: 10px; margin: 0; }
@@ -369,6 +369,7 @@ class ObjectPanel(QWidget):
     def set_result(self, objects: list[dict], summary: str, diagnostic: str = "") -> None:
         self._objects = {str(obj.get("id", index)): obj for index, obj in enumerate(objects)}
         self._selected_id = None
+        self.diagnostic.setChecked(False)
         self.summary.setText(summary)
         self.diagnostic_text.setText(diagnostic or "Aucun détail technique.")
         self.table.setSortingEnabled(False)
@@ -490,6 +491,9 @@ class MainWindow(QMainWindow):
             icon_file = paths.icon
         if icon_file.is_file():
             self.setWindowIcon(QIcon(str(icon_file)))
+        application = QApplication.instance()
+        if application is not None:
+            application.setStyleSheet(APP_STYLESHEET)
         self.setStyleSheet(APP_STYLESHEET)
         self._build_ui()
         self._refresh_models()
@@ -622,7 +626,8 @@ class MainWindow(QMainWindow):
         history_layout.addWidget(history_splitter)
         self._tabs.addTab(history_page, "Historique")
         root_layout.addWidget(self._tabs, 1)
-        root_layout.addWidget(self._build_footer())
+        self._footer = self._build_footer()
+        root_layout.addWidget(self._footer)
         self.setCentralWidget(root)
         QShortcut(QKeySequence("F11"), self, self._toggle_fullscreen)
         QShortcut(QKeySequence("Escape"), self, self._leave_fullscreen)
@@ -654,6 +659,7 @@ class MainWindow(QMainWindow):
         layout.addStretch()
         attribution_path = self._paths.icon.parent / "powered by_white.png"
         attribution = QLabel()
+        attribution.setObjectName("brandAttribution")
         attribution.setAlignment(Qt.AlignmentFlag.AlignCenter)
         attribution.setToolTip("Powered by")
         if attribution_path.is_file():
@@ -748,6 +754,7 @@ class MainWindow(QMainWindow):
             "Importer une image",
             str(Path.home()),
             "Images (*.png *.jpg *.jpeg *.bmp *.tif *.tiff *.webp)",
+            options=QFileDialog.Option.DontUseNativeDialog,
         )
         if not filename:
             return
@@ -764,7 +771,13 @@ class MainWindow(QMainWindow):
     def _add_model_from_file(self) -> None:
         if self._thread is not None or self._close_when_finished:
             return
-        filename, _ = QFileDialog.getOpenFileName(self, "Ajouter un modèle ONNX", "", "Modèle ONNX (*.onnx)")
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            "Ajouter un modèle ONNX",
+            "",
+            "Modèle ONNX (*.onnx)",
+            options=QFileDialog.Option.DontUseNativeDialog,
+        )
         if not filename:
             return
         source = Path(filename)

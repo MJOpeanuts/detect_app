@@ -33,13 +33,15 @@ Le dossier des images peut être modifié avec la variable `NUTS_VISION_IMAGES`.
 
 Les métadonnées du modèle fourni indiquent la licence AGPL-3.0.
 
+Le seuil de confiance réglable commence à 25 %. Sa valeur, affichée en pourcentage, est convertie en valeur de 0 à 1 et utilisée par l'inférence.
+
 La base contient exactement deux tables métier, `analysis_logs` et `detected_objects`. `completed_at` correspond à la fin du traitement aussi bien en cas de succès que d'erreur, sauf pour une analyse interrompue par un arrêt de l'application : son heure réelle de fin est inconnue et reste `NULL`. Une ligne d'analyse est créée pour chaque exécution, y compris pour la même image et le même modèle. Le lien objet-analyse utilise une clé étrangère `ON DELETE RESTRICT`.
 
 Au démarrage, un verrou d'instance local est acquis avant tout accès à la base. Une seconde instance affiche un message puis quitte sans modifier celle-ci. Les analyses restées en état `processing` sont alors passées à `error` dans une transaction dédiée, avec un message d'interruption ; leurs images, annotations et découpes sont conservées pour le diagnostic.
 
 ## Analyse et historique
 
-L'onglet **Analyse** affiche l'image d'entrée et son chemin, ainsi que les commandes d'analyse. L'onglet **Historique** permet uniquement de consulter les résultats : sélectionner un résultat ne change jamais l'image d'entrée et ne permet pas de lancer une analyse.
+L'onglet **Analyse** affiche l'image d'entrée, les boîtes interactives et les découpes associées dès la fin du traitement. Le visualiseur conserve les proportions, permet l'ajustement, le zoom à la molette et le déplacement. L'onglet **Historique** permet uniquement de consulter les fichiers enregistrés : sélectionner un résultat ne change jamais l'image d'entrée et ne relance pas l'inférence. `F11` bascule le plein écran et `Échap` en sort.
 
 Si une analyse est en cours à la fermeture, l'application propose de rester ou de fermer après sa terminaison. L'inférence ONNX n'est pas annulée : l'interface reste réactive, les nouveaux lancements sont interdits et la fenêtre attend la fin du thread avant de se fermer.
 
@@ -54,3 +56,5 @@ Si une analyse est en cours à la fermeture, l'application propose de rester ou 
 ## Tests
 
 Depuis le dépôt : `python -m unittest discover -s tests`.
+
+Les ressources d'interface sont locales. Les notices disponibles pour les icônes sont dans `THIRD_PARTY_NOTICES.md`.

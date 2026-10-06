@@ -29,7 +29,16 @@ class WindowTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         root = Path(self.temporary.name)
-        self.paths = AppPaths(root, root / "database.sqlite3", root, root, root, root, root, root)
+        self.paths = AppPaths(
+            root,
+            root / "database.sqlite3",
+            root,
+            root,
+            root,
+            root,
+            root,
+            Path(__file__).resolve().parents[1] / "nuts-app.png",
+        )
         self.sessions = create_session_factory(self.paths.database)
         self.repository = AnalysisRepository(self.sessions)
         self.input = root / "A.png"
@@ -192,6 +201,12 @@ class WindowTests(unittest.TestCase):
         self.assertIsNone(self.window._preview_path)
         self.assertEqual(self.window._image.text(), "Image introuvable")
 
+    def test_unreadable_history_image_is_shown_as_missing_without_crashing(self):
+        unreadable = self.paths.images / "unreadable.png"
+        unreadable.write_text("not an image", encoding="utf-8")
+        self.window._show_preview(unreadable)
+        self.assertEqual(self.window._image.text(), "Image introuvable ou illisible")
+
     def test_image_change_clears_analysis_result_but_preserves_history(self):
         self.select_input()
         self.window._results.set_result([self.make_object("old")], "1 objet détecté")
@@ -265,6 +280,8 @@ class WindowTests(unittest.TestCase):
         self.assertTrue((root / "powered by_white.png").is_file())
         self.assertTrue((root / "squirrel.svg").is_file())
         self.assertTrue((root / "THIRD_PARTY_NOTICES.md").is_file())
+        self.assertFalse(self.window._analyze.icon().isNull())
+        self.assertFalse(self.window._footer.findChild(type(self.window._input_name), "brandAttribution").pixmap().isNull())
 
 
 if __name__ == "__main__":
