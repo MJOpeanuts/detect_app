@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QObject, Qt, QThread, Signal
+from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
     QListWidget,
@@ -64,8 +65,10 @@ class MainWindow(QMainWindow):
         self._service = service
         self._selected_image: Path | None = None
         self._preview_path: Path | None = None
+        self._input_preview_path: Path | None = None
         self._thread: QThread | None = None
         self._worker: AnalysisWorker | None = None
+        self._close_when_finished = False
         self.setWindowTitle("Nuts Vision Desktop")
         self.setMinimumSize(1080, 700)
         if paths.icon.is_file():
@@ -91,6 +94,9 @@ class MainWindow(QMainWindow):
         header.addWidget(self._status, 2)
         layout.addLayout(header)
 
+        self._tabs = QTabWidget()
+        analysis_page = QWidget()
+        analysis_layout = QVBoxLayout(analysis_page)
         controls = QHBoxLayout()
         self._models = QComboBox()
         self._models.setMinimumWidth(240)
@@ -106,8 +112,19 @@ class MainWindow(QMainWindow):
         controls.addWidget(self._add_model)
         controls.addWidget(self._choose_image)
         controls.addWidget(self._analyze)
-        layout.addLayout(controls)
+        analysis_layout.addLayout(controls)
+        self._input_image = QLabel("Choisissez une image pour commencer")
+        self._input_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._input_image.setMinimumSize(480, 380)
+        self._input_image.setStyleSheet("background: #20242b; color: #e5e7eb; border-radius: 8px;")
+        analysis_layout.addWidget(self._input_image, 1)
+        self._input_name = QLabel("Aucune image d'entrée")
+        self._input_name.setWordWrap(True)
+        analysis_layout.addWidget(self._input_name)
+        self._tabs.addTab(analysis_page, "Analyse")
 
+        history_page = QWidget()
+        history_layout = QVBoxLayout(history_page)
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self._history = QListWidget()
         self._history.setMinimumWidth(230)
@@ -116,7 +133,7 @@ class MainWindow(QMainWindow):
 
         content = QWidget()
         content_layout = QVBoxLayout(content)
-        self._image = QLabel("Choisissez une image pour commencer")
+        self._image = QLabel("Sélectionnez une analyse dans l'historique")
         self._image.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._image.setMinimumSize(480, 380)
         self._image.setStyleSheet("background: #20242b; color: #e5e7eb; border-radius: 8px;")
@@ -132,7 +149,9 @@ class MainWindow(QMainWindow):
         splitter.addWidget(content)
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 4)
-        layout.addWidget(splitter, 1)
+        history_layout.addWidget(splitter, 1)
+        self._tabs.addTab(history_page, "Historique")
+        layout.addWidget(self._tabs, 1)
         self.setCentralWidget(root)
 
     def _refresh_models(self, selected_identifier: str | None = None) -> None:
@@ -161,6 +180,8 @@ class MainWindow(QMainWindow):
             self._history.setCurrentItem(selected_item)
 
     def _select_image(self) -> None:
+        if self._thread is not None or self._close_when_finished:
+            return
         filename, _ = QFileDialog.getOpenFileName(
             self,
             "Choisir une image",
@@ -170,8 +191,9 @@ class MainWindow(QMainWindow):
         if not filename:
             return
         self._selected_image = Path(filename)
-        self._show_preview(self._selected_image)
-        self._objects.setRowCount(0)
+        self._input_preview_path = self._selected_image
+        self._input_name.setText(f"Image d'entrée : {self._selected_image}")
+        self._update_preview()
         self._status.setText(f"Image sélectionnée : {self._selected_image.name}")
 
     def _add_model_from_file(self) -> None:
@@ -198,7 +220,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Modèle non compatible", str(exc))
 
     def _start_analysis(self) -> None:
-        if self._thread is not None:
+        if self._thread is not None or self._close_when_finished or self._tabs.currentIndex() != 0:
             return
         if self._selected_image is None:
             QMessageBox.information(self, "Image requise", "Choisissez d'abord une image à analyser.")
@@ -208,6 +230,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Modèle requis", "Ajoutez ou sélectionnez un modèle ONNX compatible.")
             return
         self._choose_image.setEnabled(False)
+        self._models.setEnabled(False)
         self._add_model.setEnabled(False)
         self._analyze.setEnabled(False)
         self._status.setText("Analyse en cours…")
@@ -221,6 +244,7 @@ class MainWindow(QMainWindow):
         self._worker.failed.connect(self._thread.quit)
         self._thread.finished.connect(self._worker.deleteLater)
         self._thread.finished.connect(self._analysis_thread_finished)
+        self._thread.finished.connect(self._thread.deleteLater)
         self._thread.start()
 
     def _analysis_finished(self, job_id: str) -> None:
@@ -237,7 +261,11 @@ class MainWindow(QMainWindow):
     def _analysis_thread_finished(self) -> None:
         self._thread = None
         self._worker = None
+        if self._close_when_finished:
+            QTimer.singleShot(0, self.close)
+            return
         self._choose_image.setEnabled(True)
+        self._models.setEnabled(True)
         self._add_model.setEnabled(True)
         self._analyze.setEnabled(True)
 
@@ -263,9 +291,11 @@ class MainWindow(QMainWindow):
                 self._objects.setItem(row, column, QTableWidgetItem(text))
         self._status.setText(
             f"{log['status']} · {log['model_name']} · {log['started_at'][:19].replace('T', ' ')}"
+            + (f" · {log['error_message']}" if log["error_message"] else "")
         )
 
     def _show_preview(self, path: Path) -> None:
+        self._preview_path = None
         if not path.is_file():
             self._image.setPixmap(QPixmap())
             self._image.setText("Image introuvable")
@@ -275,17 +305,52 @@ class MainWindow(QMainWindow):
         self._update_preview()
 
     def _update_preview(self) -> None:
-        if self._preview_path is None:
-            return
-        pixmap = QPixmap(str(self._preview_path))
-        if not pixmap.isNull():
-            self._image.setPixmap(
-                pixmap.scaled(
-                    self._image.size(),
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
+        for label, path in (
+            (self._input_image, self._input_preview_path),
+            (self._image, self._preview_path),
+        ):
+            if path is None:
+                continue
+            pixmap = QPixmap(str(path))
+            if pixmap.isNull():
+                label.setPixmap(QPixmap())
+                label.setText("Image introuvable ou illisible")
+            else:
+                label.setText("")
+                label.setPixmap(
+                    pixmap.scaled(
+                        label.size(),
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
                 )
-            )
+
+    def closeEvent(self, event) -> None:
+        if self._thread is None:
+            event.accept()
+            return
+        event.ignore()
+        if self._close_when_finished:
+            return
+        dialog = QMessageBox(self)
+        dialog.setWindowTitle("Analyse en cours")
+        dialog.setText(
+            "Une analyse est en cours. L'inférence ne sera pas annulée. "
+            "Vous pouvez rester ou fermer après sa terminaison."
+        )
+        stay = dialog.addButton("Rester dans l'application", QMessageBox.ButtonRole.RejectRole)
+        deferred_close = dialog.addButton("Fermer après l'analyse", QMessageBox.ButtonRole.AcceptRole)
+        dialog.setDefaultButton(stay)
+        dialog.exec()
+        if dialog.clickedButton() == deferred_close:
+            self._close_when_finished = True
+            self._choose_image.setEnabled(False)
+            self._models.setEnabled(False)
+            self._add_model.setEnabled(False)
+            self._analyze.setEnabled(False)
+            self._status.setText("Fermeture après la fin de l'analyse en cours…")
+            if self._thread is None:
+                QTimer.singleShot(0, self.close)
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)

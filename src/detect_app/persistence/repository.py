@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import sessionmaker
 
 from detect_app.persistence.database import AnalysisLog, DetectedObject
@@ -81,6 +81,18 @@ class AnalysisRepository:
                 log.status = "error"
                 log.error_message = message[:2000]
                 log.completed_at = utc_now()
+
+    def recover_interrupted_jobs(self) -> None:
+        with self._session_factory.begin() as session:
+            session.execute(
+                update(AnalysisLog)
+                .where(AnalysisLog.status == "processing")
+                .values(
+                    status="error",
+                    error_message="Analyse interrompue par un arrêt de l'application ; heure de fin inconnue.",
+                    completed_at=None,
+                )
+            )
 
     def list_jobs(self) -> list[dict]:
         with self._session() as session:
