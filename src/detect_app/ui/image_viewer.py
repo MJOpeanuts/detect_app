@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from detect_app.vision.image import ImageReadError, make_preview
+from detect_app.vision.image import IMAGE_PROCESSING_LOCK, ImageReadError, make_preview
 from detect_app.ui.theme import VIEW_BACKGROUND, VIEW_TEXT
 
 _IMAGE_LOAD_POOL = QThreadPool()
@@ -45,18 +45,21 @@ class ImageLoadTask(QRunnable):
         if self._request_cancelled.is_set() or self._viewer_destroyed.is_set():
             return
         try:
-            preview, reference_size = make_preview(self._path)
-            if self._request_cancelled.is_set() or self._viewer_destroyed.is_set():
-                return
-            width, height = preview.size
-            image = QImage(
-                preview.tobytes(),
-                width,
-                height,
-                width * 3,
-                QImage.Format.Format_RGB888,
-            ).copy()
-            self._signals.loaded.emit(self._generation, image, reference_size, "")
+            with IMAGE_PROCESSING_LOCK:
+                if self._request_cancelled.is_set() or self._viewer_destroyed.is_set():
+                    return
+                preview, reference_size = make_preview(self._path)
+                if self._request_cancelled.is_set() or self._viewer_destroyed.is_set():
+                    return
+                width, height = preview.size
+                image = QImage(
+                    preview.tobytes(),
+                    width,
+                    height,
+                    width * 3,
+                    QImage.Format.Format_RGB888,
+                ).copy()
+                self._signals.loaded.emit(self._generation, image, reference_size, "")
         except FileNotFoundError:
             self._signals.loaded.emit(self._generation, QImage(), None, "Fichier image introuvable.")
         except ImageReadError as exc:

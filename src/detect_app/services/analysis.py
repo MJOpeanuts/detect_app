@@ -11,6 +11,7 @@ from detect_app.persistence.repository import AnalysisRepository
 from detect_app.services.image_source import ImageSource
 from detect_app.services.models import ModelRegistry
 from detect_app.vision.engine import run_inference
+from detect_app.vision.image import serialize_image_processing
 from detect_app.vision.types import Detection
 
 
@@ -33,6 +34,7 @@ class AnalysisService:
             raise ValueError("Chemin d'image en dehors du dossier d'analyses.")
         return path
 
+    @serialize_image_processing
     def analyze(
         self,
         source: ImageSource,

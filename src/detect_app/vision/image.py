@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import warnings
+from collections.abc import Callable
+from functools import wraps
 from pathlib import Path
+from threading import RLock
+from typing import ParamSpec, TypeVar
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
@@ -12,6 +16,9 @@ MAX_ESTIMATED_IMAGE_MEMORY = 2 * 1024 * 1024 * 1024
 MAX_PREVIEW_DIMENSION = 2048
 SUPPORTED_IMAGE_FORMATS = {"BMP", "JPEG", "PNG", "TIFF", "WEBP"}
 SUPPORTED_IMAGE_SUFFIXES = {".bmp", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"}
+IMAGE_PROCESSING_LOCK = RLock()
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
 class ImageReadError(ValueError):
@@ -32,6 +39,15 @@ class ImageTooLargeError(ImageReadError):
 
 class ImageMemoryLimitError(ImageReadError):
     pass
+
+
+def serialize_image_processing(function: Callable[P, R]) -> Callable[P, R]:
+    @wraps(function)
+    def wrapped(*args: P.args, **kwargs: P.kwargs) -> R:
+        with IMAGE_PROCESSING_LOCK:
+            return function(*args, **kwargs)
+
+    return wrapped
 
 
 def _open_checked(path: str | Path) -> Image.Image:
@@ -97,6 +113,7 @@ def open_oriented_rgb(path: str | Path) -> Image.Image:
         opened.close()
 
 
+@serialize_image_processing
 def make_preview(path: str | Path) -> tuple[Image.Image, tuple[int, int]]:
     opened = _open_checked(path)
     try:

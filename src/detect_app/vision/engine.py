@@ -11,7 +11,7 @@ import onnxruntime as ort
 from PIL import Image
 
 from detect_app.vision.types import Detection
-from detect_app.vision.image import open_oriented_rgb
+from detect_app.vision.image import open_oriented_rgb, serialize_image_processing
 
 CONFIDENCE_THRESHOLD = 0.25
 IOU_THRESHOLD = 0.45
@@ -193,6 +193,7 @@ def _nms(boxes: np.ndarray, scores: np.ndarray, classes: np.ndarray) -> list[int
     return selected[:300]
 
 
+@serialize_image_processing
 def run_inference(
     model_path: str | Path,
     image_path: str | Path,
