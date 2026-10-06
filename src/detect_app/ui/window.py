@@ -147,6 +147,7 @@ class MainWindow(QMainWindow):
         root_layout.setSpacing(6)
         self._tabs = QTabWidget()
         self._tabs.setDocumentMode(True)
+        self._tabs.tabBar().setDrawBase(False)
         self._tabs.setCornerWidget(self._brand_corner(), Qt.Corner.TopLeftCorner)
         self._active_status = QLabel("Prêt")
         self._active_status.setObjectName("activeStatus")

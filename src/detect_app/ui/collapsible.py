@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QTextOption
 from PySide6.QtWidgets import QPlainTextEdit, QSizePolicy, QToolButton, QVBoxLayout, QWidget
 
 
@@ -36,6 +37,8 @@ class CollapsibleSection(QWidget):
             Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.TextSelectableByKeyboard
         )
         self.content.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+        # Long paths and tracebacks wrap instead of being cut horizontally.
+        self.content.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
         self.content.setMaximumHeight(150)
         self.content.setMinimumHeight(70)
         self.content.setVisible(False)
