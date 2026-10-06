@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from PIL import Image
 
@@ -15,6 +16,24 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
 class AnalysisServiceTests(unittest.TestCase):
+    def test_selected_confidence_threshold_reaches_inference(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            registry = ModelRegistry(root / "models", root / "configuration")
+            model = registry.ensure_bundled_model(REPOSITORY_ROOT / "ic_detect_best.onnx")
+            image_path = root / "input.png"
+            Image.new("RGB", (20, 20), "white").save(image_path)
+            repository = AnalysisRepository(create_session_factory(root / "database.sqlite3"))
+            service = AnalysisService(repository, registry, root / "analyses")
+
+            with patch(
+                "detect_app.services.analysis.run_inference",
+                return_value=(Image.new("RGB", (20, 20), "white"), []),
+            ) as inference:
+                service.analyze(ManualImageSource(image_path), model.identifier, 0.73)
+
+            self.assertEqual(inference.call_args.args[3], 0.73)
+
     def test_repeated_image_and_model_create_distinct_completed_jobs(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

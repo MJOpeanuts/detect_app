@@ -10,6 +10,7 @@ from PySide6.QtGui import (
     QImage,
     QImageReader,
     QKeySequence,
+    QPainter,
     QPen,
     QPixmap,
     QShortcut,
@@ -164,7 +165,7 @@ class ImageViewer(QGraphicsView):
         self.setBackgroundBrush(VIEW_BACKGROUND)
         self.setFrameShape(QGraphicsView.Shape.NoFrame)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setRenderHints(self.renderHints() | self.RenderHint.SmoothPixmapTransform)
+        self.setRenderHints(self.renderHints() | QPainter.RenderHint.SmoothPixmapTransform)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
@@ -252,7 +253,7 @@ class ImageViewer(QGraphicsView):
         self._draw_image()
         if self._fit_after_load:
             self._fit_after_load = False
-            QTimer.singleShot(0, self.fit_image)
+            self.fit_image()
 
     def _draw_image(self) -> None:
         if self._image.isNull():
@@ -553,7 +554,7 @@ class MainWindow(QMainWindow):
         self._confidence.setFixedWidth(105)
         self._analyze = QPushButton("Analyser")
         self._analyze.setObjectName("analyzeButton")
-        squirrel_icon = paths.icon.parent / "squirrel.svg"
+        squirrel_icon = self._paths.icon.parent / "squirrel.svg"
         if squirrel_icon.is_file():
             self._analyze.setIcon(QIcon(str(squirrel_icon)))
         self._analyze.setDefault(False)
@@ -930,8 +931,9 @@ class MainWindow(QMainWindow):
         self._image.select_detection(identity)
 
     def _show_preview(self, path: Path) -> None:
-        self._preview_path = Path(path)
-        self._image.load_path(self._preview_path, "Image introuvable")
+        path = Path(path)
+        self._preview_path = path if path.is_file() else None
+        self._image.load_path(path, "Image introuvable")
 
     def _update_preview(self) -> None:
         # Viewport resizing only changes the graphics view; decoded pixels stay cached.
@@ -996,6 +998,17 @@ class MainWindow(QMainWindow):
             self._set_active_status("Fermeture après la fin de l’analyse")
             if self._thread is None:
                 QTimer.singleShot(0, self.close)
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key.Key_F11:
+            self._toggle_fullscreen()
+            event.accept()
+            return
+        if event.key() == Qt.Key.Key_Escape and self.isFullScreen():
+            self._leave_fullscreen()
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)

@@ -9,7 +9,9 @@ from unittest.mock import Mock, patch
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PIL import Image
-from PySide6.QtCore import QEventLoop, QTimer
+from PySide6.QtCore import QEventLoop, Qt, QTimer
+from PySide6.QtGui import QIcon
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from detect_app.config import AppPaths
@@ -34,6 +36,8 @@ class WindowTests(unittest.TestCase):
         self.history_image = root / "B.png"
         Image.new("RGB", (50, 50), "red").save(self.input)
         Image.new("RGB", (50, 50), "blue").save(self.history_image)
+        self.crop_image = root / "crop.png"
+        Image.new("RGB", (12, 12), "green").save(self.crop_image)
         self.repository.create_job("B", "B.png", "manual", "model", "a" * 64)
         self.repository.complete_job("B", [], "B.png")
         registry = Mock()
@@ -72,7 +76,7 @@ class WindowTests(unittest.TestCase):
             self.window._select_image()
 
     def start_slow_analysis(self, failure=False):
-        def analyze(source, model_id):
+        def analyze(source, model_id, confidence_threshold):
             if not self.release.wait(4):
                 raise RuntimeError("Test worker timed out")
             if failure:
@@ -187,6 +191,80 @@ class WindowTests(unittest.TestCase):
         self.window._update_preview()
         self.assertIsNone(self.window._preview_path)
         self.assertEqual(self.window._image.text(), "Image introuvable")
+
+    def test_image_change_clears_analysis_result_but_preserves_history(self):
+        self.select_input()
+        self.window._results.set_result([self.make_object("old")], "1 objet détecté")
+        self.window._selected_image = None
+        with patch("detect_app.ui.window.QFileDialog.getOpenFileName", return_value=(str(self.history_image), "")):
+            self.window._select_image()
+        self.assertEqual(self.window._results.table.rowCount(), 0)
+        self.assertEqual(self.window._input_image.path, self.history_image)
+        self.assertEqual(len(self.repository.list_jobs()), 1)
+
+    def test_confidence_value_is_passed_to_worker_and_result_is_visible(self):
+        self.window._confidence.setValue(42.5)
+        self.start_slow_analysis()
+        self.assertAlmostEqual(self.service.analyze.call_args.args[2], 0.425)
+        self.release.set()
+        self.wait_until(lambda: self.window._thread is None)
+        self.assertEqual(self.window._results.summary.text(), "Analyse terminée : aucun objet détecté.")
+        self.assertIn("aucun objet détecté", self.window._active_status.text())
+
+    def test_history_selection_does_not_overwrite_active_status_or_infer(self):
+        self.select_input()
+        self.window._set_active_status("Analyse en cours…")
+        self.window._tabs.setCurrentIndex(1)
+        self.window._history.setCurrentRow(0)
+        self.assertEqual(self.window._active_status.text(), "Analyse en cours…")
+        self.service.analyze.assert_not_called()
+        self.assertEqual(self.window._selected_image, self.input)
+
+    def make_object(self, identity, confidence=0.5, crop_path="crop.png"):
+        return {
+            "id": identity,
+            "class_id": 0,
+            "class_name": f"objet-{identity}",
+            "confidence": confidence,
+            "x_min": 2.0,
+            "y_min": 3.0,
+            "x_max": 18.0,
+            "y_max": 19.0,
+            "crop_path": crop_path,
+        }
+
+    def test_selection_after_sort_keeps_detection_and_crop_identity(self):
+        objects = [self.make_object("high", 0.95), self.make_object("low", 0.15)]
+        self.window._input_image.load_path(self.input)
+        self.window._input_image.set_detections(objects)
+        self.window._results.set_result(objects, "2 objets détectés")
+        table = self.window._results.table
+        table.sortItems(1, Qt.SortOrder.DescendingOrder)
+        row = next(
+            row for row in range(table.rowCount())
+            if table.item(row, 0).data(Qt.ItemDataRole.UserRole) == "low"
+        )
+        table.selectRow(row)
+        self.assertEqual(self.window._results.selected_id(), "low")
+        self.assertEqual(self.window._input_image._selected_id, "low")
+        self.assertEqual(self.window._results.crop.path, self.crop_image)
+        self.assertEqual(self.window._results.table.columnCount(), 2)
+
+    def test_fullscreen_shortcuts_toggle_and_restore_window_geometry(self):
+        geometry = self.window.geometry()
+        QTest.keyClick(self.window, Qt.Key.Key_F11)
+        self.assertTrue(self.window.isFullScreen())
+        QTest.keyClick(self.window, Qt.Key.Key_Escape)
+        self.assertFalse(self.window.isFullScreen())
+        self.assertEqual(self.window.geometry(), geometry)
+
+    def test_brand_resources_are_present_and_loadable(self):
+        root = Path(__file__).resolve().parents[1]
+        self.assertTrue(QIcon(str(root / "nuts-app.ico")).isNull() is False)
+        self.assertTrue((root / "nuts-app.png").is_file())
+        self.assertTrue((root / "powered by_white.png").is_file())
+        self.assertTrue((root / "squirrel.svg").is_file())
+        self.assertTrue((root / "THIRD_PARTY_NOTICES.md").is_file())
 
 
 if __name__ == "__main__":
