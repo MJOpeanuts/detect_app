@@ -3,7 +3,7 @@ requires = ["setuptools>=75"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "nuts-vision-desktop"
+name = "detect-app"
 version = "0.1.0"
 description = "Application locale de détection de composants électroniques."
 readme = "README.md"
@@ -17,15 +17,16 @@ dependencies = [
 ]
 
 [project.scripts]
-nuts-vision = "detect_app.__main__:main"
+detect-app = "detect_app.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.data-files]
-"share/nutsvision" = [
+"share/detect_app" = [
     "ic_detect_best.onnx",
     "nuts-app.png",
+    "nuts-app.svg",
     "nuts-app.ico",
     "powered by_white.png",
     "squirrel.svg",

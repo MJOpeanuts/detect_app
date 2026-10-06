@@ -17,16 +17,16 @@ from detect_app.ui.window import MainWindow
 def main() -> int:
     paths = AppPaths.create()
     application = QApplication(sys.argv)
-    application.setApplicationName("Nuts Vision Desktop")
+    application.setApplicationName("detect_app")
     windows_icon = paths.icon.parent / "nuts-app.ico"
     app_icon = windows_icon if sys.platform == "win32" and windows_icon.is_file() else paths.icon
     if app_icon.is_file():
         application.setWindowIcon(QIcon(str(app_icon)))
-    instance_lock = QLockFile(str(paths.data_dir / "nuts_vision.lock"))
+    instance_lock = QLockFile(str(paths.data_dir / "detect_app.lock"))
     instance_lock.setStaleLockTime(0)
     if not instance_lock.tryLock(0):
         message = (
-            "Nuts Vision Desktop est déjà ouvert. Utilisez la fenêtre existante."
+            "detect_app est déjà ouvert. Utilisez la fenêtre existante."
             if instance_lock.error() == QLockFile.LockError.LockFailedError
             else "Impossible de verrouiller les données locales. Vérifiez les droits d'accès."
         )

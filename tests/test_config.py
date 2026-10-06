@@ -17,11 +17,11 @@ class ConfigTests(unittest.TestCase):
                 os.environ,
                 {
                     "LOCALAPPDATA": str(local_app_data),
-                    "NUTS_VISION_IMAGES": str(image_folder),
+                    "DETECT_APP_IMAGES": str(image_folder),
                 },
             ):
                 paths = AppPaths.create()
-            self.assertEqual(paths.database, local_app_data / "DataPeanuts" / "NutsVision" / "database" / "nuts_vision.sqlite3")
+            self.assertEqual(paths.database, local_app_data / "DataPeanuts" / "detect_app" / "database" / "detect_app.sqlite3")
             self.assertEqual(paths.images, image_folder)
             self.assertTrue(paths.models.is_dir())
 

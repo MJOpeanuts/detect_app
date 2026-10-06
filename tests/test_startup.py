@@ -22,7 +22,7 @@ class StartupTests(unittest.TestCase):
         self.sessions = create_session_factory(self.paths.database)
         self.repository = AnalysisRepository(self.sessions)
         self.repository.create_job("pending", "original.png", "manual", "model", "a" * 64)
-        self.lock_path = str(root / "nuts_vision.lock")
+        self.lock_path = str(root / "detect_app.lock")
 
     def tearDown(self):
         self.sessions.kw["bind"].dispose()
