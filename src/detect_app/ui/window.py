@@ -827,6 +827,7 @@ class MainWindow(QMainWindow):
             self._set_active_status("Aucun modèle compatible", "warning")
             return
         self._active_job_id = None
+        self._input_image.set_detections([])
         self._results.set_result([], "Analyse en cours…")
         self._set_active_status("Analyse en cours…")
         self._progress.show()
@@ -877,6 +878,7 @@ class MainWindow(QMainWindow):
         self._update_analyze_enabled()
 
     def _analysis_failed(self, message: str) -> None:
+        self._input_image.set_detections([])
         self._set_active_status("L’analyse n’a pas pu démarrer.", "error")
         self._results.set_result([], "Échec de l’analyse.", message)
         self._set_diagnostic(message)

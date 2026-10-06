@@ -226,6 +226,26 @@ class WindowTests(unittest.TestCase):
         self.assertEqual(self.window._results.summary.text(), "Analyse terminée : aucun objet détecté.")
         self.assertIn("aucun objet détecté", self.window._active_status.text())
 
+    def test_worker_failure_clears_previous_image_overlays_and_objects(self):
+        self.select_input()
+        previous = self.make_object("previous")
+        self.window._input_image.set_detections([previous])
+        self.window._results.set_result([previous], "1 objet détecté")
+
+        def fail_before_job(_source, _model_id, _threshold):
+            if not self.release.wait(4):
+                raise RuntimeError("Test worker timed out")
+            raise RuntimeError("Test inference failure")
+
+        self.service.analyze.side_effect = fail_before_job
+        self.window._start_analysis()
+        self.wait_until(lambda: self.service.analyze.called)
+        self.assertEqual(self.window._results.table.rowCount(), 0)
+        self.assertEqual(self.window._input_image._detections, [])
+        self.release.set()
+        self.wait_until(lambda: self.window._thread is None)
+        self.assertEqual(self.window._input_image._detections, [])
+
     def test_history_selection_does_not_overwrite_active_status_or_infer(self):
         self.select_input()
         self.window._set_active_status("Analyse en cours…")
