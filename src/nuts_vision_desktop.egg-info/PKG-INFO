@@ -1,3 +1,10 @@
+Metadata-Version: 2.1
+Name: nuts-vision-desktop
+Version: 0.1.0
+Summary: Application locale de détection de composants électroniques.
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+
 # Nuts Vision Desktop
 
 Application Windows locale en français pour importer une image, lancer une détection ONNX sur CPU, consulter les résultats et conserver l'historique SQLite. Aucune connexion réseau n'est utilisée pendant une analyse.
