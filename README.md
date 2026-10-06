@@ -19,6 +19,7 @@ Sous Windows, les données techniques sont stockées dans `%LOCALAPPDATA%\DataPe
 - `database\detect_app.sqlite3` : base SQLite ;
 - `models\` : modèles ajoutés ou embarqués ;
 - `configuration\models\` : mapping des classes ;
+- `configuration\removed_bundled_models.json` : empreintes des modèles embarqués retirés par l’utilisateur (ils ne sont pas réajoutés au démarrage) ;
 - `logs\` : journaux.
 
 Par défaut, les images, annotations et découpes sont enregistrées dans le dossier Images Windows (résolu par son identifiant de dossier connu, y compris si son nom affiché est traduit), sous `detect_app\analyses\<job_id>\`. `DETECT_APP_IMAGES` permet de choisir un autre dossier. Les chemins d’images conservés dans la base sont relatifs à ce dossier.
@@ -37,14 +38,55 @@ Le modèle fourni `ic_detect_best.onnx` est inspecté avant utilisation : entré
 
 Les noms sont lus dans les métadonnées du modèle, sans supposer un ordre de classes : `0=four_side`, `1=two_side`, `2=without_side`. Si un modèle n’intègre pas les noms, un mapping explicite est demandé. Seuls les exports Ultralytics statiques de détection brute à une entrée RGB sont acceptés ; les sorties end-to-end/NMS, signatures dynamiques, modèles multi-entrées et fichiers `.pt` sont refusés.
 
-## Analyse, historique et architecture
+## Interface
 
-L’application conserve les écrans **Analyse** et **Historique**, une seule analyse active, le verrou d’instance et la récupération des jobs interrompus. Fermer pendant une analyse propose d’attendre sa terminaison sans bloquer l’interface.
+La navigation principale comporte exactement trois onglets : **Analyse**, **Historique**, **Modèles**. Le pied de page « powered by » est affiché directement sur le fond de l’application (#181A1D), sans surface intermédiaire, dans les trois onglets et en plein écran (F11, Échap pour quitter).
 
-- `ui/` : fenêtre PySide6, thème, visualiseur de preview et panneau d’objets ;
+### Analyse
+
+- Rangée source : **Importer une image**, nom de l’image, indication de glisser-déposer ou message de refus local.
+- Rangée paramètres : **Modèle**, **Confiance minimale** (25 % par défaut, de 0 à 100 %, valeur transmise à l’inférence) et **Analyser** à droite. Sans modèle compatible, Analyser est désactivé et un lien ouvre l’onglet Modèles.
+- Rangée **Classement facultatif** : Client et PCBA, avec **Nouveau client…** et **Nouveau PCBA…**. Avec « Aucun client », la liste propose tous les PCBA (avec leur client ou « sans client ») ; choisir un client filtre les PCBA. Choisir un PCBA affiche son client sans jamais le réaffecter. Un client sans PCBA n’est pas enregistré : le job reste non classé.
+- Import par dialogue ou par dépôt d’un fichier depuis l’Explorateur sur le visualiseur : les deux passent par la même validation (une seule image, fichier local, ni dossier ni URL distante, fichier lisible), puis par un décodage hors du thread graphique. Une image valide efface les résultats précédents ; un import refusé laisse l’image et le résultat en place. Aucun dépôt ne lance d’analyse. Pendant une analyse ou une fermeture différée, l’import et le dépôt sont refusés.
+- Après réussite, le visualiseur affiche le fichier annoté enregistré (état « Image annotée »), la liste des objets et leurs découpes.
+
+Stratégie d’affichage des annotations : le fichier `annotated.png` enregistré contient déjà les boîtes, classes et confiances ; le visualiseur n’y ajoute que la surbrillance de l’objet sélectionné, pour ne jamais dessiner deux fois les mêmes boîtes. Si le fichier annoté manque juste après une analyse, les boîtes sont reconstruites depuis les coordonnées enregistrées sur l’original, sans relancer l’inférence. L’original n’est jamais modifié.
+
+### Historique
+
+- Filtres **Client** (Tous / Sans client / client) et **PCBA** (Tous / Sans PCBA / PCBA cohérents avec le client), tri chronologique décroissant. Chaque entrée indique date, modèle, chemin de classement, état et nombre d’objets. « Sans PCBA » désigne un job non rattaché ; « Sans client » un job rattaché à un PCBA sans client.
+- Sélecteur **Original / Annotée** au-dessus du visualiseur : Annotée par défaut si disponible, Original sans boîtes ni surbrillance. Les deux images restent en cache et le cadrage est conservé entre les modes. Un fichier manquant désactive le mode correspondant et affiche un avertissement local ; aucune inférence n’est relancée.
+- **Ouvrir le dossier** et **Modifier le classement** : rattacher le job à un PCBA existant ou nouveau, retirer le lien, ou changer le client du PCBA (après confirmation, car cela reclasse toutes ses analyses). Le dossier du job reste identifié par `job_id`. Le classement d’un job en cours n’est pas modifiable. La suppression d’un PCBA ou d’un client encore lié est refusée avec une explication.
+
+### Modèles
+
+Liste des modèles à gauche ; à droite nom, identifiant, empreinte SHA-256 abrégée, nombre de classes, format d’entrée, mapping et chemin du fichier géré. **Ajouter un modèle ONNX** réutilise la validation de compatibilité, le mapping intégré ou demandé, l’empreinte et la copie dans le stockage géré, hors du thread graphique. Le nouveau modèle est aussitôt sélectionnable dans Analyse. **Retirer…** demande confirmation, supprime la copie gérée et son mapping, conserve le fichier source fourni ainsi que toutes les analyses ; un modèle utilisé par l’analyse en cours ne peut pas être retiré.
+
+### Diagnostic
+
+Chaque onglet possède un panneau **Diagnostic** repliable (chevron, fermé par défaut, accessible au clavier). Il contient les détails techniques sélectionnables, classés par catégorie (erreur, objet sélectionné, fichiers…). Le résumé d’une erreur reste visible hors du panneau.
+
+## Schéma SQLite
+
+Version de schéma : 2 (`PRAGMA user_version`). Les clés étrangères sont activées sur chaque connexion.
+
+- `clients` : `id` (TEXT, UUID, clé primaire), `name` (TEXT, obligatoire, non vide).
+- `pcbas` : `id` (TEXT, UUID, clé primaire), `name` (TEXT, obligatoire, non vide), `client_id` (TEXT, nullable, clé étrangère vers `clients.id`, indexée). Deux PCBA peuvent porter le même nom.
+- `analysis_logs` : un job par analyse (image, modèle, état, chemins `image_path` et `annotated_image_path`), plus `pcba_id` (TEXT, nullable, clé étrangère vers `pcbas.id`, indexée). Le client d’un job est obtenu par son PCBA.
+- `detected_objects` : objets détectés d’un job.
+
+Les suppressions sont bloquées (`ON DELETE RESTRICT`) : supprimer un PCBA ou un client lié ne supprime jamais de job.
+
+Mise à jour : au démarrage, une base existante en version 1 est sauvegardée (`detect_app.sqlite3.backup-v1-<horodatage>`, API de sauvegarde SQLite), puis mise à jour dans une transaction (création de `clients` et `pcbas`, ajout de `analysis_logs.pcba_id` et des index). Les analyses existantes sont conservées sans PCBA. Une base d’un schéma plus récent est refusée avec un message.
+
+## Architecture
+
+L’application garde une seule analyse active, le verrou d’instance et la récupération des jobs interrompus. Fermer pendant une analyse propose d’attendre sa terminaison sans bloquer l’interface.
+
+- `ui/` : fenêtre PySide6, thème, visualiseur, panneau d’objets, panneau repliable, écran Modèles, dialogues de classement ;
 - `services/` : orchestration des fichiers, modèles, inférence et persistance ; les originaux restent séparés des previews ;
 - `vision/` : validation ONNX, décodage orienté, prétraitement, inférence et post-traitement, sans Qt ni SQLite ;
-- `persistence/` : deux tables métier SQLite (`analysis_logs` et `detected_objects`).
+- `persistence/` : schéma SQLite, mise à jour contrôlée et dépôt.
 
 `services/image_source.py` définit la frontière entre les sources d’images (import manuel ou matériel). Les ressources Data Peanuts partagées (`nuts-app.png`, `nuts-app.svg`, `nuts-app.ico`, `powered by_white.png`, `squirrel.svg`) gardent leurs noms et leur dessin.
 

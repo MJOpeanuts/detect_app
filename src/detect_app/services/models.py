@@ -17,6 +17,7 @@ class ModelSpec:
     path: Path
     sha256: str
     class_names: tuple[str, ...]
+    input_size: int | None = None
 
 
 def sha256_file(path: Path) -> str:
@@ -33,6 +34,8 @@ class ModelRegistry:
         self.configuration_directory = configuration_directory / "models"
         self.model_directory.mkdir(parents=True, exist_ok=True)
         self.configuration_directory.mkdir(parents=True, exist_ok=True)
+        # Digests of bundled models the user removed, so startup does not silently re-add them.
+        self._removed_bundled_path = configuration_directory / "removed_bundled_models.json"
 
     def inspect_candidate(self, path: Path) -> ModelInspection:
         return inspect_model(path)
@@ -71,12 +74,65 @@ class ModelRegistry:
         temporary = configuration_path.with_suffix(".json.tmp")
         temporary.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
         temporary.replace(configuration_path)
-        return ModelSpec(configuration_path.stem, safe_stem, target, digest, names)
+        self._forget_removed(digest)
+        return ModelSpec(configuration_path.stem, safe_stem, target, digest, names, inspection.input_size)
+
+    def _removed_bundled(self) -> set[str]:
+        try:
+            values = json.loads(self._removed_bundled_path.read_text(encoding="utf-8"))
+            return {str(value) for value in values} if isinstance(values, list) else set()
+        except (OSError, ValueError):
+            return set()
+
+    def _write_removed_bundled(self, digests: set[str]) -> None:
+        temporary = self._removed_bundled_path.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(sorted(digests)), encoding="utf-8")
+        temporary.replace(self._removed_bundled_path)
+
+    def _forget_removed(self, digest: str) -> None:
+        removed = self._removed_bundled()
+        if digest in removed:
+            removed.discard(digest)
+            self._write_removed_bundled(removed)
 
     def ensure_bundled_model(self, bundled_model: Path) -> ModelSpec | None:
         if not bundled_model.is_file():
             return None
+        removed = self._removed_bundled()
+        if removed and sha256_file(bundled_model) in removed:
+            return None
         return self.register(bundled_model)
+
+    def remove(self, identifier: str) -> list[Path]:
+        """Remove the managed copy and its mapping; user source files and results are never touched."""
+        configuration_path = (self.configuration_directory / f"{identifier}.json").resolve()
+        if configuration_path.parent != self.configuration_directory.resolve() or not configuration_path.is_file():
+            raise ModelCompatibilityError("Le modèle à retirer est introuvable.")
+        config = json.loads(configuration_path.read_text(encoding="utf-8"))
+        removed: list[Path] = []
+        model_path = (self.model_directory / str(config.get("model_file", ""))).resolve()
+        still_referenced = False
+        for other in self.configuration_directory.glob("*.json"):
+            if other.resolve() == configuration_path:
+                continue
+            try:
+                if json.loads(other.read_text(encoding="utf-8")).get("model_file") == config.get("model_file"):
+                    still_referenced = True
+            except (OSError, ValueError, AttributeError):
+                continue
+        configuration_path.unlink()
+        removed.append(configuration_path)
+        if (
+            not still_referenced
+            and model_path.parent == self.model_directory.resolve()
+            and model_path.is_file()
+        ):
+            model_path.unlink()
+            removed.append(model_path)
+        digest = config.get("sha256")
+        if digest:
+            self._write_removed_bundled(self._removed_bundled() | {str(digest)})
+        return removed
 
     def list_models(self) -> list[ModelSpec]:
         models: list[ModelSpec] = []
@@ -105,6 +161,7 @@ class ModelRegistry:
                         model_path,
                         digest,
                         names,
+                        inspection.input_size,
                     )
                 )
             except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):

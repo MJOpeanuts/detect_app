@@ -7,7 +7,7 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from detect_app.config import AppPaths
-from detect_app.persistence.database import create_session_factory
+from detect_app.persistence.database import SchemaVersionError, create_session_factory
 from detect_app.persistence.repository import AnalysisRepository
 from detect_app.services.analysis import AnalysisService
 from detect_app.services.models import ModelRegistry
@@ -33,7 +33,11 @@ def main() -> int:
         QMessageBox.warning(None, "Démarrage impossible", message)
         return 1
     try:
-        session_factory = create_session_factory(paths.database)
+        try:
+            session_factory = create_session_factory(paths.database)
+        except SchemaVersionError as exc:
+            QMessageBox.critical(None, "Démarrage impossible", str(exc))
+            return 1
         repository = AnalysisRepository(session_factory)
         repository.recover_interrupted_jobs()
         model_registry = ModelRegistry(paths.models, paths.configuration)
